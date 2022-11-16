@@ -1,0 +1,110 @@
+name: Build, Package and Release ASP.Net Core app
+
+env:
+  AZURE_WEBAPP_NAME: demo-app-services    # set this to the name of your Azure Web App
+  AZURE_WEBAPP_PACKAGE_PATH: '.'      # set this to the path to your web app project, defaults to the repository root
+  DOTNET_VERSION: '6.0.x'             # set this to the .NET Core version to use
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - Dev
+
+  pull_request:
+    branches:
+      - main
+      - Dev
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Dotnet Restore
+        run: dotnet restore
+
+      - name: Build with dotnet
+        run: dotnet build --no-restore
+
+      - name: dotnet publish
+        run: dotnet publish -c Release -o ${{env.AZURE_WEBAPP_PACKAGE_PATH}}/myapp
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v3
+        with:
+          name: mydotnet-app
+          path: ${{env.AZURE_WEBAPP_PACKAGE_PATH}}/myapp
+          
+ # Deploy to Azure Web apps
+ 
+  deploy:
+    runs-on: self-hosted
+    needs: build
+    
+    steps:
+      #- name: Download artifact
+       # uses: actions/download-artifact@v3
+       # with:
+        #  name: mydotnet-app
+        #  path: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/myapp
+        
+      - name: 'Run Azure webapp deploy action using publish profile credentials'
+        uses: azure/webapps-deploy@v2
+        with: 
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE  }} # Define secret variable in repository settings as per action documentation
+          package: '${{env.AZURE_WEBAPP_PACKAGE_PATH}}/myapp'
+
+  release:
+    runs-on: self-hosted
+    needs: [build, deploy]
+    
+    steps:
+      #- name: Download artifact
+        #uses: actions/download-artifact@v3
+        #with:
+          #name: mydotnet-app
+          #path: ${{env.AZURE_WEBAPP_PACKAGE_PATH}}/mydotnet-app
+        
+      #- name: Display structure of downloaded files
+        #run: ls -R
+      
+      #- name: Zip all the downloaded files
+        #uses: thedoctor0/zip-release@main
+        #with:
+          #type: 'zip'
+          #filename: 'mydotnet-app-latest.zip'
+          #directory: ${{env.AZURE_WEBAPP_PACKAGE_PATH}}/mydotnet-app
+          #path: ${{env.AZURE_WEBAPP_PACKAGE_PATH}}/mydotnet-app
+          
+      - name: Performing folder zip action 
+        run: zip -r mydotnet-app.zip ${{env.AZURE_WEBAPP_PACKAGE_PATH}}/myapp
+        
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+            
+      - name: Uplod asset to GitHub Release
+        id: upload-release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+         upload_url: ${{ steps.create-release.outputs.upload_url }}
+         asset_path: ./mydotnet-app.zip
+         asset_name: mydotnet-app-v${{ github.run_number }}.zip
+         asset_content_type: application/zip
