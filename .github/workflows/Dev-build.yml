@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - Dev
+      #- Dev
 
   pull_request:
     branches:
-      - Dev
+      #- Dev
 
 jobs:
   build:
