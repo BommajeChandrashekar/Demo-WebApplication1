@@ -9,10 +9,12 @@ on:
   push:
     branches:
       #- Dev
+      - master
 
   pull_request:
     branches:
       #- Dev
+      - master
 
 jobs:
   build:
